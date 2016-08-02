@@ -1,0 +1,10 @@
+Usage: op3toolkit [OPTION] [FILE]
+
+  --oem-unlock		Unlock bootloader
+  --flash-twrp		Flash default TWRP
+  --flash-recovery	Flash recovery from [FILE]
+  --supersu		Push newest SuperSU zip to /sdcard
+  --help		Display this help and exit
+  --version		Display version and exit
+
+Report bugs to santeri3700 via XDA-Developers.com
