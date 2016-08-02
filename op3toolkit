@@ -1,0 +1,184 @@
+#!/bin/bash
+# OnePlus 3 Toolkit for Linux
+# Author: santeri3700
+# Credits:
+# - OnePlus for the ADB script
+# - ismail for the download command
+# - Google for SDK Tools
+# Please, report all bugs and suggestions to santeri3700 @ XDA-Developers!
+
+VERSION=1.0
+PAR0=$1
+PAR1=$2
+ADB=bin/$(uname)/adb
+FASTBOOT=bin/$(uname)/fastboot
+
+DEVID=0x2a70
+ANDROID_CONFIG=~/.android/adb_usb.ini
+ANDROID_CONFIG_ORIG=~/.android/adb_usb.ini.bak
+SUPERSUFILE=SuperSU.zip
+SUPERSUDL="download.chainfire.eu/supersu-stable"
+DEFAULTTWRP=twrp.img
+DEFAULTTWRPDL="https://dl.twrp.me/oneplus3/twrp-3.0.2-0-oneplus3.img"
+DEFAULTTWRPMD5="53050fd2afa106b787a9348b33631795" # We are not using the official MD5
+
+function unlockbootloader {
+    echo "## ALL DATA WILL BE WIPED! ##"
+    echo "#############################"
+    echo " "
+    echo "Make sure your device is disconnected from this computer!"
+    echo "Enable USB debugging and OEM Unlocking if not already enabled:"
+    echo "Go to Settings, open About Phone. Scroll down and tap Build number 7 times until the 'You are now a developer' pops up."
+    echo "Then go back and open the Developer Options and enable USB Debugging AND OEM Unlocking."
+    echo " "
+    echo "After enabling USB debugging and OEM Unlocking, boot to fastboot mode:"
+    echo "Turn off the phone and make sure it's still disconnected!"
+    echo "Press Volume UP and Power and let them go when the text appears."
+    echo "Now you can connect the phone to this computer. Do not press any buttons now!"
+    echo " "
+    echo "> TO ABORT PRESS Ctrl+C"
+    $($FASTBOOT 'wait-for-device')
+    echo "Proceeding OEM Unlock..."
+    echo "Now, Unlock bootloader? -> Choose Yes"
+    $($FASTBOOT 'oem unlock')
+    echo "Bootloader unlocked!"
+    echo "Wait for the phone to boot before doing anything else!"
+    echo "Now you can flash custom recoveries and install SuperSU!"
+}
+
+function lockbootloader {
+    # Maybe in the future, when stock rom files are officially released by OnePlus!
+    echo "Locking the bootloader is not supported with this script."
+    echo "I do not want to people brick their phones."
+    echo "If you really need to (re)lock the bootloader,"
+    echo "please search the Internet and learn the risks!"
+    echo "Thank you for your understanding!"
+}
+
+function flashtwrp {
+    if [ ! -f $DEFAULTTWRP ]; then
+      echo "Downloading the latest TWRP image..."
+      wget -O $DEFAULTTWRP $DEFAULTTWRPDL
+      LOCALCHECKSUM=$(md5sum $DEFAULTTWRP)
+      VALIDCHECKSUM="$DEFAULTTWRPMD5  $DEFAULTTWRP"
+      if [ "$LOCALCHECKSUM" == "$VALIDCHECKSUM" ]; then
+        echo "File checksum is valid!"
+      else
+        echo "Invalid checksum! Aborting.."
+        echo "LOCAL: $LOCALCHECKSUM"
+        echo "REMOTE: $VALIDCHECKSUM"
+        exit
+      fi
+    fi
+
+    if [ ! -f $DEFAULTTWRP ]; then
+      echo "Error: $TWRPDEFAULT doesn't exist and couldn't be downloaded! Contact santeri3700!"
+      exit
+    fi
+
+    echo "Boot to fastboot mode:"
+    echo "Turn off the phone and make sure it's disconnected!"
+    echo "Press Volume UP and Power and let them go when the text appears."
+    echo "Now you can connect the phone to this computer. Do not press any buttons now!"
+    echo " "
+    echo "> TO ABORT PRESS Ctrl+C"
+    $($FASTBOOT 'wait-for-device')
+    echo "Flashing TWRP..."
+    $($FASTBOOT 'flash recovery' $DEFAULTTWRP)
+    echo "Flashed!"
+    echo " "
+    echo "Now choose Power off or Recovery mode and press power button,"
+    echo "to continue to the TWRP or to power off the phone."
+}
+
+function flashrecovery {
+    if [ ! -f $PAR1 ] || [ -z $PAR1 ]; then
+      echo "Error: File doesn't exist! Invalid [FILE] parameter."
+      exit
+    fi
+    echo "THIS MAY BE DANGEROUS!"
+    echo "ARE YOU SURE YOU WANT TO FLASH: $PAR1 ?"
+    echo "IF THE FILE IS INVALID, FLASHING IT WILL CORRUPT THE RECOVERY PARTITION!"
+    echo "PRESS ENTER TO CONTINUE OR Ctrl+C TO ABORT!"
+    read
+    echo "Boot to fastboot mode:"
+    echo "Turn off the phone and make sure it's disconnected!"
+    echo "Press Volume UP and Power and let them go when the text appears."
+    echo "Now you can connect the phone to this computer. Do not press any buttons now!"
+    echo " "
+    echo "> TO ABORT PRESS Ctrl+C"
+    $($FASTBOOT 'wait-for-device')
+    echo "Flashing TWRP..."
+    $($FASTBOOT 'flash recovery' $PAR1)
+    echo "Flashed!"
+    echo " "
+    echo "Now choose Power off or Recovery mode and press power button,"
+    echo "to continue to the TWRP or to power off the phone."
+}
+
+function supersu {
+    if [ ! -f $SUPERSUFILE ]; then
+      echo "Downloading the latest stable SuperSU zip..."
+      # Thanks to http://unix.stackexchange.com/users/2601/ismail
+      wget -O $SUPERSUFILE $(curl -w "%{url_effective}\n" -I -L -s -S $SUPERSUDL -o /dev/null)"?retrieve_file=1"
+      echo "Finished!"
+    fi
+    if [ -f $SUPERSUFILE ]; then
+        echo "Make sure the phone is powered on and connect it to this computer if not already connected!"	
+	echo ">>> Check your phone and press 'OK' to allow USB debugging!"
+        $($ADB 'wait-for-device')
+	echo "Pushing to device..."
+        $($ADB 'push' $SUPERSUFILE '/sdcard/' &>/dev/null)
+        echo "Pushed!"
+        echo " "
+        echo "Restart your phone to the recovery mode and install $SUPERSUFILE!"
+	echo "You need a custom recovery to flash third-party zips! Flash TWRP if not already done."
+    else
+        echo "Error: $SUPERSUFILE doesn't exist and couldn't be downloaded! Contact santeri3700!"
+	exit
+    fi
+}
+
+function printhelp {
+    cat help.txt
+}
+
+function printversion {
+    echo $VERSION
+}
+
+if [ "$EUID" -ne 0 ]; then
+  echo "Please, run this script as root."
+  exit
+fi
+
+if [ ! -f $ADB ]; then
+    echo "Invalid path for ADB: $ADB"
+    echo "Contact santeri3700!"
+    exit
+fi
+
+if [ ! -f $FASTBOOT ];then
+    echo "Invalid path for FASTBOOT: $FASTBOOT"
+    echo "Contact santeri3700!"
+    exit
+fi
+
+# Thanks to OnePlus, modified by santeri3700
+grep $DEVID $ANDROID_CONFIG &>/dev/null
+  if [ $? -eq 0 ]; then
+     echo &>/dev/null
+  else
+     cp $ANDROID_CONFIG $ANDROID_CONFIG_ORIG
+     echo $DEVID >> $ANDROID_CONFIG
+  fi
+
+case "$1" in
+    --version) printversion;;
+    --oem-unlock) unlockbootloader;;
+    --oem-lock) lockbootloader;;
+    --flash-twrp) flashtwrp;;
+    --flash-recovery) flashrecovery;;
+    --supersu) supersu;;
+    *) printhelp;;
+esac
