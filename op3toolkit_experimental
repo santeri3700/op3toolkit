@@ -1,0 +1,183 @@
+#!/bin/bash
+# OnePlus 3(T) Toolkit for Linux
+# Author: santeri3700
+# Credits:
+# - OnePlus for the ADB script
+# - ismail for the download command
+# - Google for SDK Tools
+# Please, report all bugs and suggestions to santeri3700 @ XDA-Developers!
+
+# Exit status codes
+# 0 = OK
+# 1 = FAIL
+# 126 = PERMISSION DENIED / EXEC FORMAT ERROR
+# 127 = NO COMMAND FOUND
+
+version=2.0
+
+adb_fastboot_zip_url=https://dl.google.com/android/repository/platform-tools-latest-$(uname).zip
+adb_fastboot_zip_file=platform-tools-latest-$(uname).zip
+supersu_url="download.chainfire.eu/supersu-stable"
+supersu_file=SuperSU.zip
+
+adb_path=platform-tools/adb
+fastboot_path=platform-tools/fastboot
+
+echo "OP3Toolkit for Linux (and MacOS?)"
+echo "Version $version by santeri3700"
+echo "------------------------------"
+
+if [ "$EUID" -ne 0 ]; then
+  echo "Please, run this script as root."
+  exit 1
+fi
+
+if [ ! -f $adb_path ]
+then
+	echo "Downloading ADB and FASTBOOT..."
+	curl -o $adb_fastboot_zip_file $adb_fastboot_zip_url
+	unzip -q $adb_fastboot_zip_file
+	chmod -R 777 platform-tools/
+	rm $adb_fastboot_zip_file
+fi
+
+echo "Verifying ADB..."
+
+$adb_path devices &>/dev/null
+if [ $? == !0 ]
+then
+    echo "ADB error! Code: $?"
+    exit 1
+fi
+
+# Thanks to OnePlus, modified by santeri3700
+if [ ! -e ~/.android/adb_usb.ini ] ; then
+	mkdir ~/.android
+	echo "0x2a70" >> ~/.android/adb_usb.ini &>/dev/null
+fi
+grep "0x2a70" ~/.android/adb_usb.ini &>/dev/null
+if [ $? == 1 ] ; then
+   echo -e "0x2a70" >> ~/.android/adb_usb.ini &>/dev/null
+fi
+$adb_path kill-server
+
+echo "Verifying FASTBOOT..."
+
+$fastboot_path devices &>/dev/null
+if [ $? == !0 ]
+then
+    echo "FASTBOOT error! Code: $?"
+    exit 1
+fi
+
+function unlock {
+	echo "== Unlocking instructions and risks =="
+	echo "- OEM Unlocking will WIPE all userdata from the device!"
+	echo "- OEM Unlocking will NOT void your warranty according to OnePlus"
+	echo "  (this can change, and I'm NOT responsible for any damage!)"
+	echo
+	echo "Make a backup of everything important before OEM Unlocking!"
+	echo
+	echo "1. Go in to Developer Settings and ENABLE USB Debugging and OEM Unlocking."
+	echo "2. Boot in to FASTBOOT by pressing POWER+VOLUME UP"
+	echo "3. Connect the phone to this computer."
+	echo
+	echo "Press Enter to OEM UNLOCK"
+	read
+	$fastboot_path oem unlock
+	echo "Select Yes using the volume buttons."
+	echo "After that, wait for the device to boot before doing anything!"
+	echo "After first boot, you can flash custom recoveries. Ex. TWRP."
+}
+
+function flashimage {
+
+	if [ ! $1 ] || [ ! -f $1 ]
+	then
+		echo "Error: Invalid FILE."
+		exit 1
+	fi
+	
+	echo "Preparing to flash $flash"
+
+	echo
+	echo "1. Make sure the phone is in FASTBOOT mode."
+	echo "2. Make sure the DEVICE STATE is unlocked."
+	echo "3. Read the SERIAL NUMBER."
+	echo
+	echo -n "Type the SERIAL NUMBER: "
+	read serial
+	$fastboot_path devices | grep -q $serial # We will only check if first characters match!
+	
+	if [ $? == 1 ]
+	then
+    	echo "Error: Invalid SERIAL NUMBER!"
+		echo "Make sure the device is connected"
+		echo "and in FASTBOOT mode."		
+		echo "Also, the serial number is CaSe SeNsItIvE!"
+    	exit 1
+	fi
+
+	echo "FILE: $1"
+	echo
+	echo "Are you sure you want to flash?"
+	echo "Flashing a wrong image can"
+	echo "--- BRICK YOUR DEVICE! ---"
+	echo -n "Press Enter to continue"
+	read
+	echo "Flashing image..."
+
+	if [ -f $1 ]
+	then
+		$fastboot_path flash $flash $1
+		echo "Flashed!"
+	else
+		echo "Error: File does not exist."
+		exit 1
+	fi
+
+	echo "Now your are ready to reboot where you want using the volume buttons!"
+}
+
+function supersu {
+	if [ ! -f $supersu_file ]
+	then
+		echo "Downloading the latest SuperSU zip..."
+		# Thanks to http://unix.stackexchange.com/users/2601/ismail
+		curl -o $supersu_file $(curl -w "%{url_effective}\n" -I -L -s -S $supersu_url -o /dev/null)"?retrieve_file=1"
+		echo "Finished!"
+	fi
+
+	echo "Pushing zip..."
+	$adb_path push $supersu_file /sdcard/ | grep -q error
+
+	if [ $? == 0 ]
+	then
+		echo "Failed! Device not connected."
+		exit 1
+	fi
+
+    echo "SuperSU.zip is ready to be flashed."
+	echo "Reboot in to a custom recovery to flash."
+}
+
+case "$1" in
+    --oem-unlock) unlock;;
+    --flash-recovery) flash=recovery
+		flashimage $2;;
+	--flash-boot) flash=boot
+		flashimage $2;;
+    --supersu) supersu;;
+    *) echo "------------------------------"
+		echo
+		echo "Usage: op3toolkit [OPTION] [FILE]"
+		echo
+		echo "OPTIONS"
+		echo
+		echo "--oem-unlock          Unlock bootloader"
+		echo "--flash-recovery FILE Flash recovery image"
+		echo "--flash-boot FILE     Flash boot image"
+		echo "--supersu             Download SuperSU.zip"
+		echo
+		echo "Report bugs to santeri3700 @ XDA-Developers.com";;
+esac
