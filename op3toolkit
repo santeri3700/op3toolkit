@@ -108,12 +108,12 @@ function flashrecovery {
     echo " "
     echo "> TO ABORT PRESS Ctrl+C"
     $($FASTBOOT 'wait-for-device')
-    echo "Flashing TWRP..."
+    echo "Flashing recovery..."
     $($FASTBOOT 'flash recovery' $PAR1)
     echo "Flashed!"
     echo " "
     echo "Now choose Power off or Recovery mode and press power button,"
-    echo "to continue to the TWRP or to power off the phone."
+    echo "to continue to recovery mode or to power off the phone."
 }
 
 function supersu {
